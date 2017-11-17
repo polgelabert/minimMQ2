@@ -3,7 +3,7 @@ package controlador.excepciones;
 public class UsuarioYaExisteException extends Exception {
 
     public UsuarioYaExisteException(){
-        super(String.valueOf(-6));
+        super(String.valueOf(-7));
     }
 
 }

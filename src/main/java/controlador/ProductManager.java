@@ -1,25 +1,27 @@
 package controlador;
 
 import controlador.excepciones.*;
-import modelo.Pedido;
-import modelo.Producto;
-import modelo.Usuario;
+import modelo.*;
 
 import java.util.List;
 
-public interface ProductManager <colaPedidos> {
 
 
+public interface ProductManager  {
 
-    //public void listaProductosOrdAscPrecio();
 
-     boolean realizarPedido(Pedido pedido) throws UsuarioNoExisteException, ListaProductosVaciaException, ListaCantidadProductoVaciaException, MapProductosVacioException;
+    public List<Producto> listaProductosOrdAscPrecio();
 
-     Pedido servirPedido() throws ColaPedidosVaciaException, UsuarioNoExisteException, ListaProductosVaciaException, ListaCantidadProductoVaciaException;
+     boolean realizarPedido(Pedido pedido) throws UsuarioNoExisteException, ListaItemsVacia,  NoSuficienteStockException, InvalidProductQuantityException;
+
+     Pedido servirPedido() throws ColaPedidosVaciaException, UsuarioNoExisteException;
 
      List<Pedido> listaPedidosUsuario(String nombreUsuario) throws UsuarioNoExisteException, ListaPedidosUsuarioVaciaException;
 
-     //public void listaProductosOrdDescVentas();
+     public List<Producto> listaProductosOrdDescVentas();
+
+
+
 
      boolean crearUsuario(Usuario user) throws UsuarioYaExisteException;
 

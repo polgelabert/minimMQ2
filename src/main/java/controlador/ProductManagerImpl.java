@@ -1,111 +1,133 @@
 package controlador;
 
 import controlador.excepciones.*;
-import controlador.excepciones.MapProductosVacioException;
-import modelo.Pedido;
-import modelo.Producto;
-import modelo.Usuario;
-import org.apache.log4j.Logger;
+import modelo.*;
 
+import org.apache.log4j.Logger;
 import java.util.*;
 
-public class ProductManagerImpl<colaPedidos> implements ProductManager<colaPedidos> {
 
+public class ProductManagerImpl implements ProductManager {
 
 
     final static Logger log = Logger.getLogger(ProductManagerImpl.class.getName());
 
 
     private static ProductManagerImpl instance;
-    private Map< String, Usuario> mapUser;
-    private Map <String, Producto> mapProd;
+    private Map <String, Usuario> mapUser;
+    private Map <String, Producto> despensa;
 
-    private ProductManagerImpl(){
-        this.mapProd = new HashMap();
+
+    public ProductManagerImpl(){
+        this.despensa = new HashMap();
         this.mapUser = new HashMap();
     }
 
     String nombreUsuario;
     boolean check;
-    private Queue<Pedido> colaPedidos = new PriorityQueue<>();
+    Producto producto;
+    int cantidad;
+    private Cola<Pedido> colaPedidos = new ColaImpl<Pedido>();
 
 
     public static ProductManagerImpl getInstance(){
         if(instance == null) {
             instance = new ProductManagerImpl();
-            log.info("Se ha instanciado controlador.controlador.ProductManagerImpl por primera vez.");
+            log.info("Se ha instanciado controlador.ProductManagerImpl por primera vez.");
         }
         return  instance;
     }
 
 
 
-    //public void listaProductosOrdAscPrecio(){ }
+    public List<Producto> listaProductosOrdAscPrecio(){
+        log.info("Inicio listaProductosOrdAscPrecio");
+        List<Producto> listaProductos = new ArrayList<>();
+        listaProductos.addAll(despensa.values());
+        listaProductos.sort(Comparator.comparingInt(Producto::getCosteProducto));
 
-    public boolean realizarPedido(Pedido pedido) throws UsuarioNoExisteException, ListaProductosVaciaException, ListaCantidadProductoVaciaException, MapProductosVacioException{
+        log.info("Fin listaProductosOrdAscPrecio con éxito.");
+        return listaProductos;
+
+    }
+
+    public boolean realizarPedido(Pedido pedido) throws UsuarioNoExisteException, ListaItemsVacia, NoSuficienteStockException, InvalidProductQuantityException {
         log.info("Inicio realizarPedido.");
 
-        //Check que el pedido esta ok:
+        //Check que el data esta ok:
         Usuario user = getUser(pedido.getNombreUsuario());              // Usuario existe?
-        checkMapVacio(pedido);
+        pedido.checkItemsVacio(pedido);
 
-
-        addPedidoAColaPedidos(pedido);
+        enviarPedido(pedido);
 
         log.info("Fin realizarPedido con éxito.");
         return true;
     }
 
-
-    public Pedido servirPedido() throws ColaPedidosVaciaException, UsuarioNoExisteException, ListaProductosVaciaException, ListaCantidadProductoVaciaException {
+    public Pedido servirPedido() throws ColaPedidosVaciaException, UsuarioNoExisteException{
         log.info("Inicio servirPedido.");
 
-        Pedido pedido = servirPedidoDeCola();
+        Pedido pedido = colaPedidos.pop();
 
         Usuario user = getUser(pedido.getNombreUsuario());
         user.addPedidoAListaPedidosUsuario(pedido);
 
-/*
-        //Check de que el pedido está ok.
-        check = checkListaProductosVacia(pedido.getListaProductos());
-        check = checkListaCantidadProductoVacia(pedido.getListaCantidades());
-        Usuario user = getUser(pedido.getNombreUsuario());
-
-        user.addPedidoAListaPedidosUsuario(pedido);                 //Añade pedido a listaPedidosUsuario
-
         log.info("Fin servirPedido con éxito.");
-*/
         return pedido;
     }
-
 
     public List<Pedido> listaPedidosUsuario(String nombreUsuario) throws UsuarioNoExisteException, ListaPedidosUsuarioVaciaException {
         log.info("Inicio listaPedidosUsuario.");
 
         Usuario user = getUser(nombreUsuario);
-        //user.checkListaPedidosUsuario();            // Comprueba si listaPedidosUsuario está vacia.
+        user.checkListaPedidosUsuario();            // Comprueba si listaPedidosUsuario está vacia.
 
         log.info("Fin listaPedidosUsuario con éxito.");
         return user.getListaPedidosUsuario();
 
     }
 
-    //public void listaProductosOrdDescVentas(){ }
+    public List<Producto> listaProductosOrdDescVentas(){
+        log.info("Inicio listaProductosOrdDescVentas");
+
+        List<Producto> listaProductos = new ArrayList<>();
+        listaProductos.addAll(despensa.values());
+        listaProductos.sort(Comparator.comparingInt(Producto::getVentas).reversed());       //.reversed() -> orden decreciente.
+
+        log.info("Fin listaProductosOrdDescVentas con éxito.");
+        return listaProductos;
+    }
 
 
 
 
 
+    private void enviarPedido(Pedido pedido) throws InvalidProductQuantityException, NoSuficienteStockException {
 
+        for(int i = 0; i< pedido.getItems().size(); i++){
 
+            Producto p = pedido.getItems().get(i).producto;
+            int stockInicial = despensa.get(p.getNombreProducto()).getStock();
+            int quantitat = pedido.getItems().get(i).quantitat;
 
+            if(stockInicial > quantitat){
+                p.setStock(stockInicial - quantitat);           // Actualizamos stock
+                p.setVentas(quantitat);
 
+            } else { throw new NoSuficienteStockException(); }
+        }
 
+        colaPedidos.push(pedido);                       // Añadimos a la cola
 
+    }
 
+    public int colaPedidosSize() { return colaPedidos.size();}
 
+    public void addDespensa(String nombreProducto, Producto producto){
+        despensa.put(nombreProducto, producto);
+    }
 
-
+    public Producto getProductoDespensa (String nombreProducto) { return despensa.get(nombreProducto);}
 
     public boolean crearUsuario(Usuario user) throws UsuarioYaExisteException {
 
@@ -125,35 +147,80 @@ public class ProductManagerImpl<colaPedidos> implements ProductManager<colaPedid
 
     private boolean isUser (String nombre) { return (mapUser.containsKey(nombre)); }
 
-    private boolean checkListaProductosVacia(List<Producto> listaProducto) throws ListaProductosVaciaException {
-        if(listaProducto.size() == 0) throw new ListaProductosVaciaException();
-        return true;
-    }
-
-    //private boolean checkListaCantidadProductoVacia (List<CantidadesProducto> listaCantidadProducto) throws ListaCantidadProductoVaciaException {
-   //     if(listaCantidadProducto.size() == 0) throw new ListaCantidadProductoVaciaException();
-   //     return true;
-   // }
-
-    private void addPedidoAColaPedidos (Pedido pedido){
-        colaPedidos.add(pedido);
-    }
-
-    private Pedido servirPedidoDeCola() throws ColaPedidosVaciaException{
-
-        if(colaPedidos.isEmpty()) throw new ColaPedidosVaciaException();
-        return colaPedidos.poll();
-    }
-
-    public int sizeColaPedidos() {
-        return this.colaPedidos.size();
-    }
-
     public void reset() {
         this.instance = null;
     }
 
-    private void checkMapVacio(Pedido pedido) throws MapProductosVacioException {
-        if(pedido.getMapProductos().isEmpty()) throw new MapProductosVacioException();
+    public String getUserNameFromMapUser(String nombreUsuario) throws UsuarioNoExisteException{
+        if(!isUser(nombreUsuario)) throw new UsuarioNoExisteException();
+        return mapUser.get(nombreUsuario).getNombreUsuario();
     }
+
+
+    public static Logger getLog() {
+        return log;
+    }
+
+    public static void setInstance(ProductManagerImpl instance) {
+        ProductManagerImpl.instance = instance;
+    }
+
+    public Map<String, Usuario> getMapUser() {
+        return mapUser;
+    }
+
+    public void setMapUser(Map<String, Usuario> mapUser) {
+        this.mapUser = mapUser;
+    }
+
+    public Map<String, Producto> getDespensa() {
+        return despensa;
+    }
+
+    public void setDespensa(Map<String, Producto> despensa) {
+        this.despensa = despensa;
+    }
+
+    public String getNombreUsuario() {
+        return nombreUsuario;
+    }
+
+    public void setNombreUsuario(String nombreUsuario) {
+        this.nombreUsuario = nombreUsuario;
+    }
+
+    public boolean isCheck() {
+        return check;
+    }
+
+    public void setCheck(boolean check) {
+        this.check = check;
+    }
+
+    public Producto getProducto() {
+        return producto;
+    }
+
+    public void setProducto(Producto producto) {
+        this.producto = producto;
+    }
+
+    public int getCantidad() {
+        return cantidad;
+    }
+
+    public void setCantidad(int cantidad) {
+        this.cantidad = cantidad;
+    }
+
+    public Cola<Pedido> getColaPedidos() {
+        return colaPedidos;
+    }
+
+    public void setColaPedidos(Cola<Pedido> colaPedidos) {
+        this.colaPedidos = colaPedidos;
+    }
+
+
+
 }
